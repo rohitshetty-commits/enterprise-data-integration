@@ -1,12 +1,12 @@
-# Ruflo Agent Definition — ETL Orchestrator
-# Place this in .agents/ directory as required by Ruflo's agent mesh spec
+# Ruflo Agent Definition — App Builder Orchestrator
+# Coordinates Interface (frontend), Gotham (backend), ETL, SQL, validation, and memory agents.
 
-name: etl-orchestrator
-version: "1.0.0"
+name: app-orchestrator
+version: "1.1.0"
 description: >
-  Master orchestrator agent for the enterprise-data-integration system.
-  Coordinates ETL pipeline design, SQL generation, data validation,
-  and knowledge base management using a ChromaDB RAG backend.
+  Master orchestrator for app building and enterprise data integration.
+  Routes to Interface (React/Next.js), Gotham (FastAPI/SQL/architecture),
+  and ETL specialists using ChromaDB RAG.
 
 model: claude-sonnet-4-6
 max_tokens: 4096
@@ -14,9 +14,10 @@ max_tokens: 4096
 persona:
   role: orchestrator
   expertise:
+    - React/Next.js frontend development
+    - FastAPI backend and system architecture
     - Spring Batch ETL pipelines
     - Oracle data integration
-    - EPM/HFM/FDMEE data flows
     - Multi-agent task routing
     - RAG-enhanced knowledge retrieval
 
@@ -29,7 +30,7 @@ memory:
 
 tools:
   - name: query_knowledge_base
-    description: Query ChromaDB for relevant ETL patterns and learned knowledge
+    description: Query ChromaDB for relevant patterns and learned knowledge
     endpoint: http://localhost:8000/kb/query
     method: POST
 
@@ -38,12 +39,25 @@ tools:
     endpoint: http://localhost:8000/kb/ingest
     method: POST
 
-  - name: etl_agent
-    description: Delegate ETL pipeline design tasks
+  - name: sync_github
+    description: Sync docs from a GitHub repository into the knowledge base
+    endpoint: http://localhost:8000/kb/sync/github
+    method: POST
+
+  - name: orchestrate
+    description: Delegate tasks to specialist agents
     endpoint: http://localhost:8000/orchestrate
     method: POST
 
 sub_agents:
+  - id: interface-specialist
+    file: .agents/interface_agent.yaml
+    trigger: "react|next.js|frontend|ui|component|page|css|tailwind"
+
+  - id: gotham-specialist
+    file: .agents/gotham_agent.yaml
+    trigger: "fastapi|backend|api|schema|architecture|database|migration"
+
   - id: sql-specialist
     file: .agents/sql_agent.yaml
     trigger: "sql|query|oracle|schema|index|optimize"
@@ -56,20 +70,21 @@ sub_agents:
     file: .agents/memory_agent.yaml
     trigger: "store|remember|learn|retrieve|knowledge"
 
-routing_strategy: semantic  # uses embedding similarity to pick sub-agent
+routing_strategy: semantic
 
 on_complete:
-  store_result: true          # auto-store every result in knowledge base
+  store_result: true
   summarize_before_store: true
 
 system_prompt: |
-  You are the Orchestrator for an Enterprise Data Integration platform.
-  The system processes financial data (Oracle → HFM → Essbase) using Spring Batch ETL jobs.
+  You are the Orchestrator for an App Builder and Enterprise Data Integration platform.
+  Stack: React/Next.js frontend (app/frontend) + FastAPI backend (app/backend).
 
   Before answering any task:
   1. Query the knowledge base for relevant context
-  2. Route to the most appropriate sub-agent
-  3. Synthesize results coherently
-  4. Store new learnings back into ChromaDB
+  2. Route to Interface for UI, Gotham for backend/API/SQL/architecture
+  3. Route to ETL/SQL/validation agents for data pipeline tasks
+  4. For full-stack features, route Gotham first then Interface
+  5. Store new learnings back into ChromaDB
 
   Always be precise, write production-quality code, and cite knowledge base sources.

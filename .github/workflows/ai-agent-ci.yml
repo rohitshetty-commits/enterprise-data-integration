@@ -29,6 +29,7 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CHROMA_PATH: /tmp/test_chroma_db
+          CHROMA_EMBEDDINGS: default
         run: |
           pytest ai_agent/tests/ -v --tb=short
 
@@ -36,6 +37,7 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CHROMA_PATH: /tmp/test_chroma_db
+          CHROMA_EMBEDDINGS: default
         run: |
           uvicorn ai_agent.api.main:app --port 8001 &
           sleep 5

@@ -1,28 +1,31 @@
 # Ruflo Harness Config (.claude/config.yaml)
-# This tells Ruflo how to wire up the agent mesh for this project
 
-version: "1.0.0"
+version: "1.1.0"
 project: enterprise-data-integration
-description: AI-powered orchestration layer for Spring Boot ETL pipelines
+description: AI-powered app builder and orchestration layer for React/FastAPI and Spring Boot ETL
 
 harness:
-  topology: mesh               # all agents can talk to each other
-  max_agents: 6
+  topology: mesh
+  max_agents: 8
   coordination: ruflo
-  memory_sharing: true         # agents share ChromaDB memory pool
+  memory_sharing: true
 
 agents:
   primary:
     file: .agents/etl_orchestrator.yaml
   specialists:
-    - .agents/sub_agents.yaml
+    - .agents/interface_agent.yaml
+    - .agents/gotham_agent.yaml
+    - .agents/sql_agent.yaml
+    - .agents/validation_agent.yaml
+    - .agents/memory_agent.yaml
 
 memory:
   backend: chromadb
   persist_path: ./chroma_db
   collection: enterprise_etl_knowledge
   embedding_model: all-MiniLM-L6-v2
-  auto_learn: true             # store every agent output automatically
+  auto_learn: true
 
 api:
   host: localhost
@@ -34,8 +37,12 @@ environment:
   required:
     - ANTHROPIC_API_KEY
   optional:
-    - CHROMA_PATH         # defaults to ./chroma_db
-    - ORACLE_DB_URL       # for live DB queries from agents
+    - CHROMA_PATH
+    - GITHUB_TOKEN
+    - CLOUD_SYNC_ENABLED
+    - SYNC_URLS
+    - SYNC_GITHUB_REPO
+    - ORACLE_DB_URL
     - ORACLE_DB_USER
     - ORACLE_DB_PASSWORD
 
@@ -46,7 +53,7 @@ logging:
 
 hooks:
   pre_task:
-    - query_knowledge_base   # always RAG before responding
+    - query_knowledge_base
   post_task:
-    - store_result           # always persist learnings
-    - update_metrics         # track agent performance
+    - store_result
+    - update_metrics

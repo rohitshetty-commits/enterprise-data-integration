@@ -1,7 +1,7 @@
-# 🤖 AI Agent Layer — Enterprise Data Integration
+# AI Agent Layer — App Builder + Enterprise Data Integration
 
-A Python multi-agent orchestration layer built on top of the existing Spring Boot ETL framework.  
-Uses **Claude (claude-sonnet-4-6)** + **ChromaDB RAG** + **Ruflo** to give the ETL system a conversational, self-learning AI brain.
+A Python multi-agent orchestration layer for **building full-stack apps** (React/Next.js + FastAPI) and **enterprise ETL** (Spring Batch, Oracle).  
+Uses **Claude (claude-sonnet-4-6)** + **ChromaDB RAG** + **Ruflo** + **cloud sync** for a self-learning AI brain.
 
 ---
 
@@ -10,19 +10,30 @@ Uses **Claude (claude-sonnet-4-6)** + **ChromaDB RAG** + **Ruflo** to give the E
 ```
 User / API Request
         ↓
- OrchestratorAgent  ←──── ChromaDB (RAG knowledge base)
-   ↙    ↓    ↘    ↘
-ETL   SQL   Validation  Memory
-Agent Agent   Agent     Agent
+ OrchestratorAgent  ←──── ChromaDB (RAG)  ←──── Cloud Sync (GitHub, URLs)
+   ↙  ↓  ↓  ↘  ↘  ↘
+Interface Gotham ETL SQL Validation Memory
+(React)  (FastAPI)
         ↓
- FastAPI REST API  (port 8000)
+ FastAPI Orchestration API  (port 8000)
         ↓
- Ruflo Agent Mesh  (.agents/ + .claude/)
+ app/frontend (3000) + app/backend (8001)   ← product being built
+        ↓
+ Ruflo Agent Mesh  (ruflo/.agents/ + ruflo/.claude/)
 ```
 
-**How learning works:**  
-Every task the orchestrator handles is stored back into ChromaDB.  
-Next time a similar question is asked, the relevant context is retrieved automatically (RAG), making every answer better over time.
+**Agents:**
+
+| Agent | Role |
+|-------|------|
+| `interface_agent` | React/Next.js UI, components, styling, API clients |
+| `gotham_agent` | FastAPI, SQL, schema, architecture, security |
+| `etl_agent` | Spring Batch, ETL pipelines, EPM integrations |
+| `sql_agent` | Oracle SQL tuning, PL/SQL (ETL-focused) |
+| `validation_agent` | Data quality, reconciliation |
+| `memory_agent` | ChromaDB ingest and retrieval |
+
+**How learning works:** Tasks are stored in ChromaDB after completion. Cloud sync adds docs from GitHub repos and URLs. RAG retrieves context on every request.
 
 ---
 
@@ -31,15 +42,14 @@ Next time a similar question is asked, the relevant context is retrieved automat
 ### 1. Install dependencies
 
 ```bash
-cd ai_agent
-pip install -r requirements.txt
+pip install -r ai_agent/requirements.txt
 ```
 
 ### 2. Set environment variables
 
 ```bash
 cp .env.example .env
-# Edit .env and add your ANTHROPIC_API_KEY
+# Add ANTHROPIC_API_KEY; optional GITHUB_TOKEN for cloud sync
 ```
 
 ### 3. Seed the knowledge base
@@ -48,17 +58,23 @@ cp .env.example .env
 python -m ai_agent.cli seed
 ```
 
-### 4. Start interactive chat
+### 4. Chat or run the API
 
 ```bash
 python -m ai_agent.cli chat
+
+uvicorn ai_agent.api.main:app --reload --port 8000
+# Docs: http://localhost:8000/docs
 ```
 
-### 5. Or start the REST API
+### 5. Run the app scaffold (optional)
 
 ```bash
-uvicorn ai_agent.api.main:app --reload --port 8000
-# API docs at http://localhost:8000/docs
+# Backend (port 8001)
+cd app/backend && pip install -r requirements.txt && uvicorn main:app --reload --port 8001
+
+# Frontend (port 3000)
+cd app/frontend && npm install && npm run dev
 ```
 
 ---
@@ -67,11 +83,13 @@ uvicorn ai_agent.api.main:app --reload --port 8000
 
 | Command | Description |
 |---------|-------------|
-| `python -m ai_agent.cli chat` | Interactive REPL with the orchestrator |
-| `python -m ai_agent.cli ask "design a delta load job"` | One-shot task |
-| `python -m ai_agent.cli ingest ./docs/etl_patterns.md` | Ingest a file into knowledge base |
-| `python -m ai_agent.cli kb-stats` | Show knowledge base document count |
-| `python -m ai_agent.cli seed` | Seed base ETL knowledge patterns |
+| `python -m ai_agent.cli chat` | Interactive REPL |
+| `python -m ai_agent.cli ask "build a user registration API and React form"` | One-shot task |
+| `python -m ai_agent.cli ingest ./docs/app_patterns.md` | Ingest a file |
+| `python -m ai_agent.cli kb-stats` | Knowledge base size |
+| `python -m ai_agent.cli seed` | Seed ETL + React/FastAPI patterns |
+| `python -m ai_agent.cli sync-github owner/repo` | Sync GitHub README + docs/ |
+| `python -m ai_agent.cli sync-urls https://...` | Sync public URLs |
 
 ---
 
@@ -79,51 +97,66 @@ uvicorn ai_agent.api.main:app --reload --port 8000
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/orchestrate` | Send any task to the orchestrator |
-| `GET`  | `/health` | Health check + agent list |
-| `POST` | `/kb/ingest` | Add a document to ChromaDB |
-| `POST` | `/kb/query` | Query the knowledge base |
-| `GET`  | `/kb/stats` | Knowledge base statistics |
+| `POST` | `/orchestrate` | Route task to specialist agents |
+| `GET` | `/health` | Health + agent list |
 | `POST` | `/reset-session` | Clear conversation history |
+| `POST` | `/kb/ingest` | Add document to ChromaDB |
+| `POST` | `/kb/query` | Query knowledge base |
+| `GET` | `/kb/stats` | KB statistics |
+| `POST` | `/kb/ingest-file` | Ingest local file (background) |
+| `POST` | `/kb/sync/github` | Sync GitHub repo `{owner, repo, paths?}` |
+| `POST` | `/kb/sync/urls` | Sync URLs `{urls: [...]}` |
+| `POST` | `/kb/sync/all` | Run env-configured sync sources |
+| `GET` | `/kb/sync/status` | Cloud sync status |
 
-Full interactive docs: **http://localhost:8000/docs**
+---
+
+## Cloud Knowledge Sync
+
+Phased approach:
+
+1. **Manual** — `ingest`, `/kb/ingest`, memory agent
+2. **GitHub** — `sync-github owner/repo` or `POST /kb/sync/github`
+3. **URLs** — `sync-urls` or set `SYNC_URLS` in `.env`
+4. **Scheduled** — cron or GitHub Actions calling CLI weekly
+
+```bash
+python -m ai_agent.cli sync-github facebook/react
+curl -X POST http://localhost:8000/kb/sync/github \
+  -H "Content-Type: application/json" \
+  -d '{"owner": "tiangolo", "repo": "fastapi"}'
+```
+
+---
+
+## Cursor IDE Subagents
+
+Project subagents in `.cursor/agents/`:
+
+| Subagent | Purpose |
+|----------|---------|
+| `interface` | Frontend React/Next.js work |
+| `gotham` | Backend FastAPI, SQL, architecture |
+| `env-dependencies` | Env and pip setup |
+| `ci-pipeline` | AI agent CI workflow |
+| `ai-agent-tester` | pytest and smoke tests |
+| `ai-agent-docs` | This documentation |
+| `etl-codebase` | Spring Boot ETL repo navigation |
+
+```
+Use the gotham subagent to design the orders API
+Use the interface subagent to build the checkout page
+```
 
 ---
 
 ## Ruflo Integration
 
-The `.agents/` and `.claude/` directories configure this project for the [Ruflo](https://github.com/ruvnet/ruflo) agent mesh.
+Config in `ruflo/.agents/` and `ruflo/.claude/config.yaml`.
 
 ```bash
-# Install Ruflo CLI
 npm install -g claude-flow
-
-# Initialize swarm from this project's config
 npx claude-flow coordination swarm-init --config ruflo/.claude/config.yaml
-
-# Run a task across the swarm
-npx claude-flow coordination task-orchestrate \
-  --task "Design a Spring Batch job to load GL data from Oracle to HFM" \
-  --strategy parallel
-```
-
----
-
-## Adding New Knowledge
-
-Any of these methods adds new knowledge that all agents immediately benefit from:
-
-```bash
-# Ingest a markdown/text file
-python -m ai_agent.cli ingest ./docs/new_etl_pattern.md
-
-# Via REST API
-curl -X POST http://localhost:8000/kb/ingest \
-  -H "Content-Type: application/json" \
-  -d '{"text": "Your new knowledge here", "metadata": {"source": "manual", "topic": "etl"}}'
-
-# Memory agent via orchestrator
-python -m ai_agent.cli ask "store: SCD Type 3 pattern uses current and prior value columns"
 ```
 
 ---
@@ -132,28 +165,32 @@ python -m ai_agent.cli ask "store: SCD Type 3 pattern uses current and prior val
 
 ```
 ai_agent/
-├── orchestrator/
-│   └── orchestrator.py        # Main orchestrator — routes tasks, manages RAG
+├── orchestrator/orchestrator.py
 ├── rag/
-│   └── chroma_store.py        # ChromaDB wrapper — store, query, ingest files
+│   ├── chroma_store.py
+│   └── cloud_sync.py
 ├── agents/
-│   ├── etl_agent.py           # Spring Batch / ETL pipeline specialist
-│   ├── sql_agent.py           # Oracle SQL specialist
-│   ├── data_validation_agent.py  # Data quality specialist
-│   └── memory_agent.py        # Knowledge base manager
-├── api/
-│   └── main.py                # FastAPI REST server
+│   ├── interface_agent.py
+│   ├── gotham_agent.py
+│   ├── etl_agent.py
+│   ├── sql_agent.py
+│   ├── data_validation_agent.py
+│   └── memory_agent.py
+├── api/main.py
 ├── tests/
-│   └── test_smoke.py          # Smoke tests
-├── cli.py                     # Typer CLI entry point
+├── cli.py
 └── requirements.txt
 
+app/                          # Product scaffold (Interface + Gotham)
+├── frontend/                 # Next.js (port 3000)
+├── backend/                  # FastAPI (port 8001)
+└── README.md
+
 ruflo/
-├── .agents/
-│   ├── etl_orchestrator.yaml  # Primary orchestrator agent definition
-│   └── sub_agents.yaml        # SQL, validation, memory sub-agents
-└── .claude/
-    └── config.yaml            # Ruflo harness configuration
+├── .agents/                  # interface, gotham, sql, validation, memory YAML
+└── .claude/config.yaml
+
+.cursor/agents/               # Cursor IDE subagents
 ```
 
 ---
@@ -162,8 +199,12 @@ ruflo/
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `ANTHROPIC_API_KEY` | ✅ Yes | — | Your Anthropic API key |
-| `CHROMA_PATH` | No | `./chroma_db` | Where ChromaDB persists data |
-| `API_HOST` | No | `0.0.0.0` | FastAPI bind host |
-| `API_PORT` | No | `8000` | FastAPI port |
-| `ORACLE_DB_URL` | No | — | Oracle connection for live queries |
+| `ANTHROPIC_API_KEY` | Yes | — | Anthropic API key |
+| `CHROMA_PATH` | No | `./chroma_db` | ChromaDB path |
+| `API_HOST` | No | `0.0.0.0` | Orchestration API host |
+| `API_PORT` | No | `8000` | Orchestration API port |
+| `GITHUB_TOKEN` | No | — | GitHub API for cloud sync |
+| `CLOUD_SYNC_ENABLED` | No | `true` | Enable `/kb/sync/all` |
+| `SYNC_URLS` | No | — | Comma-separated URLs to sync |
+| `SYNC_GITHUB_REPO` | No | — | Default `owner/repo` for sync_all |
+| `ORACLE_DB_URL` | No | — | Oracle (future live queries) |

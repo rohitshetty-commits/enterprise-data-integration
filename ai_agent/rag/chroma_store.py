@@ -11,18 +11,25 @@ import uuid
 import os
 
 
-CHROMA_PATH = os.getenv("CHROMA_PATH", "./chroma_db")
+CHROMA_PATH_DEFAULT = "./chroma_db"
 COLLECTION_NAME = "enterprise_etl_knowledge"
 
-# Uses sentence-transformers locally — no API key needed
-EMBED_FN = embedding_functions.SentenceTransformerEmbeddingFunction(
-    model_name="all-MiniLM-L6-v2"
-)
+# Uses sentence-transformers locally by default; set CHROMA_EMBEDDINGS=default for tests
+def _build_embedding_function():
+    if os.getenv("CHROMA_EMBEDDINGS", "").lower() == "default":
+        return embedding_functions.DefaultEmbeddingFunction()
+    return embedding_functions.SentenceTransformerEmbeddingFunction(
+        model_name="all-MiniLM-L6-v2"
+    )
+
+
+EMBED_FN = _build_embedding_function()
 
 
 class ChromaStore:
     def __init__(self):
-        self.client = chromadb.PersistentClient(path=CHROMA_PATH)
+        chroma_path = os.getenv("CHROMA_PATH", CHROMA_PATH_DEFAULT)
+        self.client = chromadb.PersistentClient(path=chroma_path)
         self.collection = self.client.get_or_create_collection(
             name=COLLECTION_NAME,
             embedding_function=EMBED_FN,
@@ -33,9 +40,10 @@ class ChromaStore:
     def add_document(self, text: str, metadata: Optional[dict] = None) -> str:
         """Add a single document to the knowledge base."""
         doc_id = str(uuid.uuid4())
+        meta = metadata if metadata else {"source": "manual"}
         self.collection.add(
             documents=[text],
-            metadatas=[metadata or {}],
+            metadatas=[meta],
             ids=[doc_id],
         )
         return doc_id
@@ -43,9 +51,13 @@ class ChromaStore:
     def add_documents(self, texts: List[str], metadatas: Optional[List[dict]] = None) -> List[str]:
         """Batch add multiple documents."""
         ids = [str(uuid.uuid4()) for _ in texts]
+        if metadatas is None:
+            metadatas = [{"source": "batch"} for _ in texts]
+        else:
+            metadatas = [m if m else {"source": "batch"} for m in metadatas]
         self.collection.add(
             documents=texts,
-            metadatas=metadatas or [{} for _ in texts],
+            metadatas=metadatas,
             ids=ids,
         )
         print(f"💾 Added {len(texts)} documents to knowledge base")
