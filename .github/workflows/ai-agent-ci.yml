@@ -1,0 +1,43 @@
+name: AI Agent Layer CI
+
+on:
+  push:
+    paths:
+      - 'ai_agent/**'
+      - '.github/workflows/ai-agent-ci.yml'
+  pull_request:
+    paths:
+      - 'ai_agent/**'
+
+jobs:
+  test-agent-layer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install -r ai_agent/requirements.txt
+          pip install pytest pytest-asyncio httpx
+
+      - name: Run smoke tests
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CHROMA_PATH: /tmp/test_chroma_db
+        run: |
+          pytest ai_agent/tests/ -v --tb=short
+
+      - name: Test FastAPI health endpoint
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CHROMA_PATH: /tmp/test_chroma_db
+        run: |
+          uvicorn ai_agent.api.main:app --port 8001 &
+          sleep 5
+          curl -f http://localhost:8001/health || exit 1
+          kill %1

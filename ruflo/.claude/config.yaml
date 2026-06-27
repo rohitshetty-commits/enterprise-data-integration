@@ -1,0 +1,52 @@
+# Ruflo Harness Config (.claude/config.yaml)
+# This tells Ruflo how to wire up the agent mesh for this project
+
+version: "1.0.0"
+project: enterprise-data-integration
+description: AI-powered orchestration layer for Spring Boot ETL pipelines
+
+harness:
+  topology: mesh               # all agents can talk to each other
+  max_agents: 6
+  coordination: ruflo
+  memory_sharing: true         # agents share ChromaDB memory pool
+
+agents:
+  primary:
+    file: .agents/etl_orchestrator.yaml
+  specialists:
+    - .agents/sub_agents.yaml
+
+memory:
+  backend: chromadb
+  persist_path: ./chroma_db
+  collection: enterprise_etl_knowledge
+  embedding_model: all-MiniLM-L6-v2
+  auto_learn: true             # store every agent output automatically
+
+api:
+  host: localhost
+  port: 8000
+  python_path: ./ai_agent
+  start_command: "uvicorn ai_agent.api.main:app --reload --port 8000"
+
+environment:
+  required:
+    - ANTHROPIC_API_KEY
+  optional:
+    - CHROMA_PATH         # defaults to ./chroma_db
+    - ORACLE_DB_URL       # for live DB queries from agents
+    - ORACLE_DB_USER
+    - ORACLE_DB_PASSWORD
+
+logging:
+  level: INFO
+  file: ./logs/ruflo.log
+  structured: true
+
+hooks:
+  pre_task:
+    - query_knowledge_base   # always RAG before responding
+  post_task:
+    - store_result           # always persist learnings
+    - update_metrics         # track agent performance
